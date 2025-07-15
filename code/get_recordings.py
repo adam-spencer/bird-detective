@@ -21,7 +21,7 @@ def handle_multi_birds(args, api_key, bird_col: str = 'scientific_name'
 def get_one_recording(args: argparse.Namespace, bird_name: str, api_key: str
                       ) -> None:
     # Construct API request
-    query = f'sp:"{bird_name}" cnt:"{args.country}" q:{args.quality}'
+    query = f'sp:"{bird_name}" cnt:"{args.country}" q:">{args.quality}"'
     url = ('https://xeno-canto.org/api/3/recordings'
            f'?query={query}&key={api_key}&per_page={args.max_recordings}')
     out_path = Path(args.output_dir) / bird_name.replace(' ', '_')
@@ -61,7 +61,8 @@ if __name__ == '__main__':
     parser.add_argument('--bird-file', '-f',
                         help='CSV file containing multiple scientific names')
     parser.add_argument('--output-dir', '-o', required=True)
-    parser.add_argument('--quality', '-q', default='A')
+    parser.add_argument('--quality', '-q', default='B',
+                        help='Quality greater than [B, C, D, E]')
     parser.add_argument('--country', '-c', default='United Kingdom')
     parser.add_argument('--max-recordings', '-m', default=250, type=int)
     args = parser.parse_args()
