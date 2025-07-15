@@ -1,21 +1,31 @@
 import argparse
 import requests
+import pandas as pd
 from pathlib import Path
 from tqdm import tqdm
 
 
-def main(args):
-    # Construct API request
-    bird_name = ' '.join(args.bird_name)
-    query = f'sp:"{bird_name}" cnt:"{args.country}" q:{args.quality}'
-    with open('xenocanto_apikey.txt') as f:
+def get_api_key(loc: str = 'xenocanto_apikey.txt') -> str:
+    with open(loc) as f:
         api_key = f.readline().rstrip()
+    return api_key
+
+
+def handle_multi_birds(args, api_key, bird_col: str = 'scientific_name'
+                       ) -> None:
+    df = pd.read_csv(args.bird_file)
+    for _, bird_name in df[bird_col].items():
+        get_one_recording(args, bird_name, api_key)
+
+
+def get_one_recording(args: argparse.Namespace, bird_name: str, api_key: str
+                      ) -> None:
+    # Construct API request
+    query = f'sp:"{bird_name}" cnt:"{args.country}" q:{args.quality}'
     url = ('https://xeno-canto.org/api/3/recordings'
            f'?query={query}&key={api_key}&per_page={args.max_recordings}')
-
-    out_path = Path(args.output_dir) / '_'.join(args.bird_name)
+    out_path = Path(args.output_dir) / bird_name.replace(' ', '_')
     out_path.mkdir()
-    print(out_path)
 
     # Send API request
     try:
@@ -25,7 +35,8 @@ def main(args):
         num_recordings = data.get('numRecordings', 0)
 
         if int(num_recordings) > 0:
-            print(f'Successfully found {num_recordings} recordings.')
+            print(f'Successfully found {num_recordings} '
+                  f'recordings for {bird_name}.')
             print('Downloading...')
             for recording in tqdm(data['recordings']):
                 download_link = recording['file']
@@ -35,7 +46,7 @@ def main(args):
                 with open(out_path / f'{recording_id}.mp3', 'wb') as f:
                     f.write(audio_response.content)
         else:
-            print("No recordings found.")
+            print(f'No recordings found for {bird_name}.')
 
     except requests.exceptions.RequestException as e:
         print(f'An error occurred with the network request: {e}')
@@ -45,10 +56,25 @@ def main(args):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('bird_name', nargs='+')
+    parser.add_argument('--bird-name', '-b', nargs='+',
+                        help='Scientific name of single bird')
+    parser.add_argument('--bird-file', '-f',
+                        help='CSV file containing multiple scientific names')
     parser.add_argument('--output-dir', '-o', required=True)
     parser.add_argument('--quality', '-q', default='A')
     parser.add_argument('--country', '-c', default='United Kingdom')
     parser.add_argument('--max-recordings', '-m', default=250, type=int)
     args = parser.parse_args()
-    main(args)
+    if args.bird_name and args.bird_file:
+        raise argparse.ArgumentError(
+            'Please only specify either a bird-name or bird-file!')
+    # TODO refactor
+    api_key = get_api_key()
+    if args.bird_name:
+        bird_name = ' '.join(args.bird_name)
+        get_one_recording(args, bird_name, api_key)
+    elif args.bird_file:
+        handle_multi_birds(args, api_key)
+    else:
+        raise argparse.ArgumentError(
+            'Please specify either a bird-name or bird-file!')
